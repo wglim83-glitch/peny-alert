@@ -1,0 +1,38 @@
+name: 페니트리움 공시 알리미
+
+on:
+  schedule:
+    - cron: '0 0,1,2,3,4,5,6 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  check_dart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 공시 체크 및 텔레그램 알림
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          pip install requests -q
+          python3 << 'EOF'
+          import requests, os
+          from datetime import datetime, timedelta
+          DART_API_KEY = os.environ['DART_API_KEY']
+          TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
+          TELEGRAM_CHAT_ID = os.environ['TELEGRAM_CHAT_ID']
+          CORP_CODE = "01409022"
+          def send_telegram(message):
+              url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+              requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"})
+          end_date = datetime.now().strftime("%Y%m%d")
+          start_date = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+          params = {"crtfc_key": DART_API_KEY, "corp_code": CORP_CODE, "bgn_de": start_date, "end_de": end_date, "sort": "date", "sort_mth": "desc", "page_no": 1, "page_count": 10}
+          r = requests.get("https://opendart.fss.or.kr/api/list.json", params=params, timeout=10)
+          data = r.json()
+          if data["status"] == "000":
+              for d in data.get("list", []):
+                  dart_url = f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={d['rcept_no']}"
+                  send_telegram(f"🚨 <b>페니트리움바이오 공시!</b>\n\n📋 {d['report_nm']}\n📅 {d['rcept_dt']}\n🔗 <a href='{dart_url}'>공시 바로가기</a>")
+          EOF
